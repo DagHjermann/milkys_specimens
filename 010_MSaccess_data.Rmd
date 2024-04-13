@@ -240,6 +240,155 @@ tab <- xtabs(~paste(myear, seqno, rlabo, sep="_"), cemp_m)
 table(tab)
 ```
 
+## cemp_t2: tissue table including liver colour
+
+### Comments of cemp_t
+Make liver colour variables
+```{r cemp_c2_to_cemp_comb_leftjoin_with_tissue2_comment_liver_colour}
+# comment 1
+tab <- table(cemp_t$cmnt1)
+tab[order(tab, decreasing=TRUE)][1:50]
+
+# comment 1 when it contains "liver"
+tab_liver <- tab[grepl("liver", names(tab), ignore.case=TRUE)]
+# tab_liver[order(tab_liver , decreasing=TRUE)][1:50]
+
+# Remove spaces around colon
+cmnt <- cemp_t$cmnt1
+cmnt2 <- gsub(" : ", ":", cmnt, fixed = TRUE)
+cmnt2 <- gsub(": ", ":", cmnt2 , fixed = TRUE)
+cmnt2 <- gsub(" :", ":", cmnt2 , fixed = TRUE)
+cmnt2 <- gsub(" is ", ":", cmnt2 , fixed = TRUE)
+cmnt2 <- gsub("lll", "ll", cmnt2 , fixed = TRUE)
+cmnt2 <- gsub("hh", "h", cmnt2 , fixed = TRUE)
+cmnt2 <- gsub("gellow", "yellow", cmnt2 , fixed = TRUE)
+cmnt2 <- tolower(cmnt2)
+
+containing_liver_colour <- grepl("liver colour:", cmnt2, ignore.case=TRUE) | grepl("liver colour", cmnt2, ignore.case=TRUE)
+sum(containing_liver_colour)
+
+# cmnt3 below is a "blind alley", was made only in order to print out a bunch of colur codes (below, we continue form cmnt2)
+cmnt3 <- sub("liver colour:", "", cmnt2 , fixed = TRUE)
+cmnt3[!containing_liver_colour] <- NA
+tab_livercolour <- table(cmnt3)
+tab_livercolour <- tab_livercolour[order(tab_livercolour, decreasing=TRUE)]
+nm <- names(tab_livercolour)
+# for printing, avoid some long ones
+sel <- !substr(nm,1,4)=="part" & nchar(nm) <= 20
+nm[sel]
+
+
+# cmnt2 still has the same length as the data:
+length(cmnt2)
+
+str_cols <- c("yellow","brown","red","white","grey","green","pink")
+
+#
+# Make boolean matrix for colours in comment 1, with 8 rows (colors) and 30259 columns
+#
+containing_colour_matrix1 <- aaply(str_cols, 1, function(string) grepl(string, cmnt2, ignore.case=TRUE) & containing_liver_colour)
+dim(containing_colour_matrix1)
+apply(containing_colour_matrix1, 1, sum)
+
+
+#
+# Make boolean matrix for colours in comment 2
+#
+# All those with liver colour in column 1
+at_least_one_color_column1 <- apply(containing_colour_matrix1, 2, sum) > 0
+sum(at_least_one_color_column1 & containing_liver_colour)
+
+# All those which probably has liver colour in column 2
+sum(!at_least_one_color_column1 & containing_liver_colour)
+
+# Column 2
+cmntcol2 <- cemp_t$cmnt2
+cmntcol2 <- tolower(cmntcol2)
+# We are only interested in the cases where column 1 contains no colours, but contains the word "liver colour"
+cmntcol2[at_least_one_color_column1 | !containing_liver_colour] <- NA
+
+# Find colours in column 2
+containing_colour_matrix2 <- aaply(str_cols, 1, function(string) grepl(string, cmntcol2, ignore.case=TRUE))
+dim(containing_colour_matrix2)
+apply(containing_colour_matrix2, 1, sum)
+
+# Add colours from column 1 and column 2
+containing_colour_matrix_sum <- containing_colour_matrix1 + containing_colour_matrix2
+# Turn it in the right direction
+containing_colour_matrix_sum <- t(containing_colour_matrix_sum)
+
+containing_colour_matrix_sum <- data.frame(containing_colour_matrix_sum)
+colnames(containing_colour_matrix_sum) <- paste("Liver", str_cols, sep="_")
+str(containing_colour_matrix_sum)
+
+# The mostcommon color combinations: yellow-red
+# summarise
+comb <- containing_colour_matrix_sum %>% 
+  group_by(Liver_yellow, Liver_brown, Liver_red, Liver_white, Liver_grey, Liver_green, Liver_pink)
+combsumm <- summarise(comb, n=n())
+# sort
+combsumm <- combsumm[order(combsumm$n, decreasing=TRUE),]
+combsumm
+ 
+#
+# Add color variables to cemp_t 
+#
+
+cemp_t <- cbind(cemp_t, containing_colour_matrix_sum)
+
+#
+# Some more checking
+#
+# Check Comment 2
+tab <- table(cemp_t$cmnt2)
+tab[order(tab, decreasing=TRUE)][1:20]
+
+# Check Comment 2 when comment 1 EQUALS "liver colour" and little else
+nc <- nchar(names(tab_livercolour))
+tab2 <- tab_livercolour[order(nc, decreasing=FALSE)][1:20]
+tab2
+
+# Check comment 3
+tab <- table(cemp_t$cmnt3)
+tab[order(tab, decreasing=TRUE)][1:5]
+```
+
+Make "compound" liver colour `Liver_color`
+```{r }
+colnames_cols <- paste("Liver", str_cols, sep="_")
+colour_df <- cemp_t[, colnames_cols]
+no_col <- apply(colour_df, 1, sum)
+table(no_col)
+#head(colour_df)
+for (i in seq_along(colnames_cols)){
+  colour_df[,i] <- as.character(colour_df[,i])
+  colour_df[,i] <- sub(0, "", colour_df[,i])
+  colour_df[,i] <- sub(1, str_cols[i], colour_df[,i])
+  }
+table(colour_df$Liver_yellow)
+# colour_df$Liver_color <- paste(colour_df$Liver_yellow, colour_df$Liver_red, sep="-")
+colour_df$Liver_color <- with(colour_df, 
+                              paste(Liver_yellow, Liver_brown, Liver_red, 
+                                    Liver_white, Liver_grey, Liver_green, Liver_pink, sep = "-"))
+table(colour_df$Liver_color)
+
+# Replace one or more hyphens with a single hyphen
+colour_df$Liver_color <- gsub("-+", "-", colour_df$Liver_color)
+# Remove hyphen at start
+colour_df$Liver_color <- gsub("^-", "", colour_df$Liver_color)
+# Remove hyphen at end
+colour_df$Liver_color <- gsub("-$", "", colour_df$Liver_color)
+table(colour_df$Liver_color)
+
+# Add Liver_color to cemp_t
+cemp_t$Liver_color <- colour_df$Liver_color
+```
+
+```{r}
+cemp_t2 <- cemp_t
+```
+
+
 ## cemp_f2: specimen data  
 
 ### cemp_f: merge with cemp_m to add station + species  
@@ -374,6 +523,7 @@ cemp_f3 %>%
 
 
 ```
+
 
 ## Unique key combinations in the tables
 ```{r tabulate_combinations_of_all_tables}
@@ -818,151 +968,6 @@ load(file="Milkys_Data_2016_01_18_cemp_tables.RData")            # cemp_c2, cemp
 apply(!is.na(cemp_t), 2, sum)
 ```
 
-### Comments of cemp_t
-Make liver colour variables
-```{r cemp_c2_to_cemp_comb_leftjoin_with_tissue2_comment_liver_colour}
-# comment 1
-tab <- table(cemp_t$cmnt1)
-tab[order(tab, decreasing=TRUE)][1:50]
-
-# comment 1 when it contains "liver"
-tab_liver <- tab[grepl("liver", names(tab), ignore.case=TRUE)]
-# tab_liver[order(tab_liver , decreasing=TRUE)][1:50]
-
-# Remove spaces around colon
-cmnt <- cemp_t$cmnt1
-cmnt2 <- gsub(" : ", ":", cmnt, fixed = TRUE)
-cmnt2 <- gsub(": ", ":", cmnt2 , fixed = TRUE)
-cmnt2 <- gsub(" :", ":", cmnt2 , fixed = TRUE)
-cmnt2 <- gsub(" is ", ":", cmnt2 , fixed = TRUE)
-cmnt2 <- gsub("lll", "ll", cmnt2 , fixed = TRUE)
-cmnt2 <- gsub("hh", "h", cmnt2 , fixed = TRUE)
-cmnt2 <- gsub("gellow", "yellow", cmnt2 , fixed = TRUE)
-cmnt2 <- tolower(cmnt2)
-
-containing_liver_colour <- grepl("liver colour:", cmnt2, ignore.case=TRUE) | grepl("liver colour", cmnt2, ignore.case=TRUE)
-sum(containing_liver_colour)
-
-# cmnt3 below is a "blind alley", was made only in order to print out a bunch of colur codes (below, we continue form cmnt2)
-cmnt3 <- sub("liver colour:", "", cmnt2 , fixed = TRUE)
-cmnt3[!containing_liver_colour] <- NA
-tab_livercolour <- table(cmnt3)
-tab_livercolour <- tab_livercolour[order(tab_livercolour, decreasing=TRUE)]
-nm <- names(tab_livercolour)
-# for printing, avoid some long ones
-sel <- !substr(nm,1,4)=="part" & nchar(nm) <= 20
-nm[sel]
-
-
-# cmnt2 still has the same length as the data:
-length(cmnt2)
-
-str_cols <- c("yellow","brown","red","white","grey","green","pink")
-
-#
-# Make boolean matrix for colours in comment 1, with 8 rows (colors) and 30259 columns
-#
-containing_colour_matrix1 <- aaply(str_cols, 1, function(string) grepl(string, cmnt2, ignore.case=TRUE) & containing_liver_colour)
-dim(containing_colour_matrix1)
-apply(containing_colour_matrix1, 1, sum)
-
-
-#
-# Make boolean matrix for colours in comment 2
-#
-# All those with liver colour in column 1
-at_least_one_color_column1 <- apply(containing_colour_matrix1, 2, sum) > 0
-sum(at_least_one_color_column1 & containing_liver_colour)
-
-# All those which probably has liver colour in column 2
-sum(!at_least_one_color_column1 & containing_liver_colour)
-
-# Column 2
-cmntcol2 <- cemp_t$cmnt2
-cmntcol2 <- tolower(cmntcol2)
-# We are only interested in the cases where column 1 contains no colours, but contains the word "liver colour"
-cmntcol2[at_least_one_color_column1 | !containing_liver_colour] <- NA
-
-# Find colours in column 2
-containing_colour_matrix2 <- aaply(str_cols, 1, function(string) grepl(string, cmntcol2, ignore.case=TRUE))
-dim(containing_colour_matrix2)
-apply(containing_colour_matrix2, 1, sum)
-
-# Add colours from column 1 and column 2
-containing_colour_matrix_sum <- containing_colour_matrix1 + containing_colour_matrix2
-# Turn it in the right direction
-containing_colour_matrix_sum <- t(containing_colour_matrix_sum)
-
-containing_colour_matrix_sum <- data.frame(containing_colour_matrix_sum)
-colnames(containing_colour_matrix_sum) <- paste("Liver", str_cols, sep="_")
-str(containing_colour_matrix_sum)
-
-# The mostcommon color combinations: yellow-red
-# summarise
-comb <- containing_colour_matrix_sum %>% 
-  group_by(Liver_yellow, Liver_brown, Liver_red, Liver_white, Liver_grey, Liver_green, Liver_pink)
-combsumm <- summarise(comb, n=n())
-# sort
-combsumm <- combsumm[order(combsumm$n, decreasing=TRUE),]
-combsumm
- 
-#
-# Add color variables to cemp_t 
-#
-
-cemp_t <- cbind(cemp_t, containing_colour_matrix_sum)
-
-#
-# Some more checking
-#
-# Check Comment 2
-tab <- table(cemp_t$cmnt2)
-tab[order(tab, decreasing=TRUE)][1:20]
-
-# Check Comment 2 when comment 1 EQUALS "liver colour" and little else
-nc <- nchar(names(tab_livercolour))
-tab2 <- tab_livercolour[order(nc, decreasing=FALSE)][1:20]
-tab2
-
-# Check comment 3
-tab <- table(cemp_t$cmnt3)
-tab[order(tab, decreasing=TRUE)][1:5]
-```
-
-Make "compound" liver colour `Liver_color`
-```{r }
-colnames_cols <- paste("Liver", str_cols, sep="_")
-colour_df <- cemp_t[, colnames_cols]
-no_col <- apply(colour_df, 1, sum)
-table(no_col)
-#head(colour_df)
-for (i in seq_along(colnames_cols)){
-  colour_df[,i] <- as.character(colour_df[,i])
-  colour_df[,i] <- sub(0, "", colour_df[,i])
-  colour_df[,i] <- sub(1, str_cols[i], colour_df[,i])
-  }
-table(colour_df$Liver_yellow)
-# colour_df$Liver_color <- paste(colour_df$Liver_yellow, colour_df$Liver_red, sep="-")
-colour_df$Liver_color <- with(colour_df, 
-                              paste(Liver_yellow, Liver_brown, Liver_red, 
-                                    Liver_white, Liver_grey, Liver_green, Liver_pink, sep = "-"))
-table(colour_df$Liver_color)
-
-# Replace one or more hyphens with a single hyphen
-colour_df$Liver_color <- gsub("-+", "-", colour_df$Liver_color)
-# Remove hyphen at start
-colour_df$Liver_color <- gsub("^-", "", colour_df$Liver_color)
-# Remove hyphen at end
-colour_df$Liver_color <- gsub("-$", "", colour_df$Liver_color)
-table(colour_df$Liver_color)
-
-# Add Liver_color to cemp_t
-cemp_t$Liver_color <- colour_df$Liver_color
-```
-
-```{r}
-cemp_t2 <- cemp_t
-```
 
 #### Merge cemp_t2 with cemp_c2 to create cemp_comb
 ```{r cemp_c2_to_cemp_comb_leftjoin_with_tissue3}
