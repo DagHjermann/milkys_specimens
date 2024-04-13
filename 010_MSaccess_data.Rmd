@@ -315,6 +315,65 @@ plot(wtmea~lnmea2, subset(cemp_f2, speci %in% "GADU MOR"))
 cemp_f2$lnmea <- cemp_f2$lnmea2
 plot(wtmea~lnmea, cemp_f2)
 ```
+### length by year  
+
+```{r}
+
+ggplot(cemp_f2, aes(myear, lnmea2)) +
+  geom_jitter(width = 0.15)
+
+```
+
+### cemp_f3; delete 1949   
+
+```{r}
+
+# table(cemp_f2$myear)
+
+cemp_f3 <- cemp_f2 %>% filter(myear >= 1981)
+
+```
+
+
+### sex
+
+```{r}
+
+table(cemp_f3$speci, addNA(cemp_f3$sexco))
+
+```
+
+### gonwt: check   
+
+```{r}
+
+ggplot(
+  cemp_f3 %>% filter(speci == "GADU MOR") %>% mutate(has_gonwt = !is.na(gonwt)),
+  aes(lnmea, fill = has_gonwt)) +
+  geom_histogram()
+
+cemp_f3 %>% 
+  filter(speci == "GADU MOR" & sexco %in% c("M","F","X")) %>% 
+  mutate(has_gonwt = !is.na(gonwt)) %>%
+  ggplot(aes(myear, fill = has_gonwt)) +
+  geom_histogram() +
+  facet_wrap(vars(sexco))
+
+```
+
+### gonad weight by stations  
+
+```{r}
+
+cemp_f3 %>% 
+  filter(speci == "GADU MOR" & sexco %in% c("M","F","X")) %>% 
+  group_by(jmpst, myear) %>%
+  summarize(has_gonwt = mean(!is.na(gonwt))) %>%
+  ggplot(aes(myear, jmpst, fill = has_gonwt)) +
+  geom_tile()
+
+
+```
 
 ## Unique key combinations in the tables
 ```{r tabulate_combinations_of_all_tables}
