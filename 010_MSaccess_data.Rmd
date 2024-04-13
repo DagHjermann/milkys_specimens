@@ -62,9 +62,11 @@ cemp_m <- read.csv(paste0(datafolder, "/dbo_fish_mas.txt"),
 
 # Tissue table
 # One line per combination of myear + seqno + rlabo + subno + tissu
-cemp_t <- read.csv(paste0(datafolder, "/dbo_fish_tis.txt"), 
-                 header=TRUE, sep = ";", dec = ",", 
-                 na.strings = "", stringsAsFactors=FALSE)
+# NOTE: use csv file instead of txt file
+# - the csv file has been exported later, first to excel, then from excel to UTF-8
+cemp_t <- read.csv(paste0(datafolder, "/dbo_fish_tis.csv"), 
+                 header=TRUE, sep = ",", dec = ".", 
+                 na.strings = "", stringsAsFactors=FALSE, encoding = "UTF-8")
 
 # Measurements of contaminant concentrations
 # One line per combination of myear + seqno + rlabo + subno + tissu
