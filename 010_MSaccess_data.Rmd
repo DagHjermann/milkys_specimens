@@ -27,11 +27,15 @@ options(width=90)
 
 ## Define folders and read data
 ```{r folders}
-basefolder <- "H:/Documents/seksjon 212/COCO/Analyser/Data_extraction"
+
+# basefolder <- "H:/Documents/seksjon 212/COCO/Analyser/Data_extraction"
+
 datafolder <- "C:/Data/CEMP/2015_Milkys"
+
 #workfolder <- paste0(basefolder,"/Analyser")
 #setwd(workfolder)
 #setwd(basefolder)
+
 ```
 
 ```{r file_with_coastline_map}
@@ -100,7 +104,8 @@ dim(tab)
 ```
 
 
-## Join Contaminant concentrations and Biological effect tables
+## cemp_c: Row-bind with biological effect tables (cemp_be)  
+
 ```{r cemp_c_add_biological_effects}
 colnames(cemp_c)
 colnames(cemp_be)
@@ -113,9 +118,12 @@ nrow(cemp_c)
 nrow(cemp_be)
 cemp_c <- rbind(cemp_c, cemp_be)
 ```
+## Fix other tables
 
+### cemp_f: fix/check 
 
 ```{r cemp_f_fix}
+
 str(cemp_f)
 table(cemp_f$inorb, useNA = "always")
 
@@ -153,6 +161,7 @@ unique(cemp_f$shlwtx[first_sign %in% "S"])
 cemp_f$shlwtx <- as.numeric(sub(",",".", cemp_f$shlwtx))
 ```
 
+### cemp_t: fix
 
 ```{r cemp_t_fix}
 #
@@ -184,7 +193,8 @@ cemp_t$drywtx <- as.numeric(sub(",",".", cemp_t$drywtx))
 ```
 
 
-#### Get rid of NAs and dublettes in cemp_m
+### cemp_m: get rid of NAs and dublettes  
+
 ```{r cemp_m_dublettes}
 # Chech for dublettes
 tab <- xtabs(~paste(myear, seqno, jmpst, sep="_"), cemp_m)
@@ -230,14 +240,16 @@ tab <- xtabs(~paste(myear, seqno, rlabo, sep="_"), cemp_m)
 table(tab)
 ```
 
-#### merge to add station + species to cemp_f
+## cemp_f2: specimen data  
+
+### cemp_f: merge with cemp_m to add station + species  
 ```{r cemp_f_add_cemp_m_data}
 cemp_f <- merge(cemp_f, cemp_m[,c("myear", "seqno", "rlabo", "jmpst", "speci", "sdate")], 
                 by=c("myear", "seqno", "rlabo"), 
                 all.x=TRUE, all.y=FALSE)
 ```
 
-## cemp_f2 = Pick records with species with N > 1000 
+### cemp_f2 = Pick records with species with N > 1000 
 ```{r cemp_f2}
 tab <- table(cemp_f$speci)
 tab
@@ -246,7 +258,7 @@ tab
 cemp_f2 <- subset(cemp_f, speci %in% spp)
 ```
 
-## Weight-length plots
+### Weight-length plots
 ```{r weight_length_plot1}
 ggplot(cemp_f2, aes(x=lnmea, y=wtmea, color=speci)) + geom_point() + facet_wrap(~inorb)
 ```
@@ -256,7 +268,7 @@ gg <- ggplot(subset(cemp_f, speci %in% "GADU MOR"), aes(x=lnmea, y=wtmea, color=
 gg + geom_vline(aes(xintercept=130))
 ```
 
-## Clean cemp_f2 table
+### Clean cemp_f2 table
 ```{r cemp_f2_weight_length_clean}
 #
 # Clean weigth and length
@@ -345,8 +357,10 @@ table(is.na(cemp_c$valsnf))
 **NOTE:** You may stop here and skip to the `load_data`chunk
 
 
-## Chemical measurement table: cemp_c
-Dublettes in cemp_c
+## cemp_c: fix  
+
+### fix dublettes 1  
+
 ```{r cemp_c_fix_dublettes1}
 comb <- with(cemp_c, paste(myear, seqno, rlabo, subno, tissu, param, repno, sep="_"))
 tab <- table(comb)
@@ -356,6 +370,8 @@ for (i in 1:10){
   print(cemp_c[sel,])
   }
 ```
+
+### fix dublettes 2  
 
 ```{r cemp_c_fix_dublettes2}
 #
@@ -399,8 +415,10 @@ for (i in 1:20){
 
 ```
 
-Also include repno
+### cemp_c_clean: create by also including repno (SLOW)
+
 NOTE: two very slow procedures here (7 minutes each)
+
 ```{r cemp_c_fix_dublettes3}
 
 #
@@ -556,7 +574,7 @@ nrow(cemp_c_clean)
 ```
 
 
-## Based on cemp_c_clean we put together the data set again
+### cemp_c_clean2: new dataset based on cemp_c_clean we put together the data set again  
 Tins are removed, since there are some observations which have tins both as individual and pooled samples (I or B)
 ```{r cemp_c_fix_dublettes4}
 ## First for categorical vars
@@ -633,7 +651,7 @@ nrow(cemp_c_clean2)
 ```
 
 
-### Final check
+### cemp_c_clean2: Final check  
 Based on cemp_c_clean2 we put together the data set again
 ```{r cemp_c_fix_dublettes5}
 #
@@ -682,6 +700,7 @@ xtabs(~n_distinct, cemp_c_cont_distinct)
 # again - yeah!
 ```
 
+### cemp_c2: Remake   
 Combine categorical variables (inorb, vflag, qflag, unit) with continuous (valsnf).  
 This is the final "concentration" data file (used to )
 ```{r cemp_c2_create}
@@ -702,6 +721,7 @@ cemp_c2 <- cemp_c2[,!columns_to_remove]
 dim(cemp_c2)
 ```
 
+### Save 
 Saved as R file
 ```{r cemp_c2_save}
 save(cemp_c2, file="Milkys_Data_2016_01_18_cemp_c2.RData")
@@ -961,7 +981,7 @@ tab[,apply(tab, 2, sum) > 2000]
 colnames(cemp_comb )
 ```
 
-# Check tiswt, tiswtx.x and tiswtx.y
+## Check tiswt, tiswtx.x and tiswtx.y
 tiswt and tiswtx.x come from the tissue table (cemp_t)
 tiswtx.y comes from the fish table (cemp_f)
 ```{r cemp_comb_check_tissue_weight}
