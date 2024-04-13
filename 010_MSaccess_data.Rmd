@@ -1,0 +1,1025 @@
+---
+title: "MILKYS data from MS Access tables"
+author: "DHJ"
+date: "2024-13-04"
+output: html_document
+---
+
+*Started aas a copy of 'Milkys_Data_2016_01_18.Rmd'**
+*Folder 'C:\Users\DHJ\OneDrive - NIVA\Documents\seksjon 212\COCO\Analyser\Data_extraction'*
+
+For a quick start, go to chunk 24, `cemp_c2_load`
+
+## R libraries used
+```{r}
+library(plyr)
+library(maps)
+library(mapdata)
+library(ggplot2)
+library(reshape2)
+library(dplyr)      # group_by
+norway.coast <- map("worldHires", "Norway", col="darkgreen", plot=FALSE)
+a <- map("worldHires", plot=FALSE)
+
+# Set wider outout (default = 75)
+options(width=90)
+```
+
+## Define folders and read data
+```{r folders}
+basefolder <- "H:/Documents/seksjon 212/COCO/Analyser/Data_extraction"
+datafolder <- "C:/Data/CEMP/2015_Milkys"
+#workfolder <- paste0(basefolder,"/Analyser")
+#setwd(workfolder)
+#setwd(basefolder)
+```
+
+```{r file_with_coastline_map}
+mapfolder <- "K:\\Kart\\N1000\\"
+mapfile <- paste(mapfolder, "norge2.shp", sep="")
+```
+
+### Read data **cemp**
+(Ca 30 seconds)
+```{r data_read, cache=TRUE}
+cemp <- read.csv(paste0(datafolder, "/DHJ_Torsk_Table.txt"), 
+                 header=TRUE, sep = ";", dec = ",", 
+                 na.strings = "", stringsAsFactors=FALSE)
+# Fish table
+# One line per combination of myear + seqno + rlabo + subno
+cemp_f <- read.csv(paste0(datafolder, "/dbo_fish_spe.txt"), 
+                 header=TRUE, sep = ";", dec = ",", 
+                 na.strings = "", stringsAsFactors=FALSE)
+# Measurement table
+# Several lines per combination of myear + seqno + rlabo + subno
+cemp_m <- read.csv(paste0(datafolder, "/dbo_fish_mas.txt"), 
+                 header=TRUE, sep = ";", dec = ",", 
+                 na.strings = "", stringsAsFactors=FALSE)
+
+# Tissue table
+# One line per combination of myear + seqno + rlabo + subno + tissu
+cemp_t <- read.csv(paste0(datafolder, "/dbo_fish_tis.txt"), 
+                 header=TRUE, sep = ";", dec = ",", 
+                 na.strings = "", stringsAsFactors=FALSE)
+
+# Measurements of contaminant concentrations
+# One line per combination of myear + seqno + rlabo + subno + tissu
+cemp_c <- read.csv(paste0(datafolder, "/dbo_fish_con.txt"), 
+                 header=TRUE, sep = ";", dec = ",", 
+                 na.strings = "", stringsAsFactors=FALSE)
+
+# Measurements of biological effects
+cemp_be <- read.csv(paste0(datafolder, "/dbo_fish_becon.txt"), 
+                 header=TRUE, sep = ";", dec = ",", 
+                 na.strings = "", stringsAsFactors=FALSE)
+
+# Find out which values that are non-numeric
+# Look at the first sign
+first_sign <- substr(cemp$valsnf,1,1)
+table(first_sign)
+
+# The ones starting with N
+table(cemp$valsnf[first_sign %in% "N"])
+
+# The ones starting with a minus
+unique(cemp$valsnf[first_sign %in% "-"])[1:6]
+unique(cemp$param[first_sign %in% "-"])
+
+# The ones starting with a space
+unique(cemp$valsnf[first_sign %in% " "])[1:6]
+unique(cemp$param[first_sign %in% " "])
+
+# Let us set all to numeric (losing only 16 "NA" and 4 "ND")
+cemp$valsnf <- as.numeric(cemp$valsnf)
+```
+
+```{r biol_effects}
+tab <- xtabs(~myear + param, cemp_be)
+dim(tab)
+(param_be <- colnames(tab))
+```
+
+
+## Join Contaminant concentrations and Biological effect tables
+```{r cemp_c_add_biological_effects}
+colnames(cemp_c)
+colnames(cemp_be)
+
+cemp_be$method <- NA
+cemp_be$analys <- NA
+cemp_be$x <- NA
+
+nrow(cemp_c)
+nrow(cemp_be)
+cemp_c <- rbind(cemp_c, cemp_be)
+```
+
+
+```{r cemp_f_fix}
+str(cemp_f)
+table(cemp_f$inorb, useNA = "always")
+
+# Delete the one inorb=="1" obs:
+cemp_f <- subset(cemp_f, !inorb %in% "1")
+nrow(cemp_f)
+
+# Also delete inorb==NA
+# cemp_f[is.na(cemp_f$inorb),]
+cemp_f <- subset(cemp_f, !is.na(inorb))
+nrow(cemp_f)
+
+#
+# tiswtx, what is that?
+#
+first_sign <- substr(cemp_f$tiswtx,1,1)
+table(first_sign)
+unique(cemp_f$tiswtx[first_sign %in% " "])[1:6]
+unique(cemp_f$tiswtx[first_sign %in% "L"])
+#test <- as.numeric(sub(",",".", cemp_f$tiswtx))
+#cbind(cemp_f$tiswtx[1:100], test[1:100])
+
+# Turn into numeric
+cemp_f$tiswtx <- as.numeric(sub(",",".", cemp_f$tiswtx))
+
+#
+# shlwtx
+#
+first_sign <- substr(cemp_f$shlwtx,1,1)
+table(first_sign)
+unique(cemp_f$shlwtx[first_sign %in% "F"])
+unique(cemp_f$shlwtx[first_sign %in% "S"])
+
+# Turn into numeric
+cemp_f$shlwtx <- as.numeric(sub(",",".", cemp_f$shlwtx))
+```
+
+
+```{r cemp_t_fix}
+#
+# tiswtx in dataset cemp_t
+#
+first_sign <- substr(cemp_t$tiswtx,1,1)
+table(first_sign)
+unique(cemp_t$tiswtx[first_sign %in% " "])[1:6]
+unique(cemp_t$tiswtx[first_sign %in% "a"])
+unique(cemp_t$tiswtx[first_sign %in% "b"])
+#test <- as.numeric(sub(",",".", cemp_f$tiswtx))
+#cbind(cemp_f$tiswtx[1:100], test[1:100])
+
+# Turn into numeric
+cemp_t$tiswtx <- as.numeric(sub(",",".", cemp_t$tiswtx))
+
+#
+# drywtx in dataset cemp_t
+#
+first_sign <- substr(cemp_t$drywtx ,1,1)
+table(first_sign)
+unique(cemp_t$drywtx [first_sign %in% " "])[1:6]
+unique(cemp_t$drywtx [first_sign %in% "b"])
+#test <- as.numeric(sub(",",".", cemp_f$tiswtx))
+#cbind(cemp_f$tiswtx[1:100], test[1:100])
+
+# Turn into numeric
+cemp_t$drywtx <- as.numeric(sub(",",".", cemp_t$drywtx))
+```
+
+
+#### Get rid of NAs and dublettes in cemp_m
+```{r cemp_m_dublettes}
+# Chech for dublettes
+tab <- xtabs(~paste(myear, seqno, jmpst, sep="_"), cemp_m)
+table(tab)
+tab[tab>1]
+
+# Delete NA rows
+subset(cemp_m, is.na(myear))
+cemp_m <- subset(cemp_m, !is.na(myear))
+
+# Check for dublettes again
+tab <- xtabs(~paste(myear, seqno, jmpst, sep="_"), cemp_m)
+table(tab)
+tab[tab>1]
+
+# check data of dublettes
+dublettes <- strsplit(rownames(tab[tab>1]), "_")
+for (dub in dublettes)
+  print(subset(cemp_m, myear==as.numeric(dub[1]) & seqno==as.numeric(dub[2]) & jmpst==dub[3]))
+
+# delete #2 of dublettes
+dim(cemp_m)
+for (dub in dublettes){
+  #dub <- dublettes[[1]]
+  sel <- with(cemp_m, myear==as.numeric(dub[1]) & seqno==as.numeric(dub[2]) & jmpst==dub[3])
+  delete_index <- which(sel)[2]
+  cemp_m <- cemp_m[-delete_index,]
+  }
+dim(cemp_m)
+
+# Chech for dublettes of just myear + seqno
+tab <- xtabs(~paste(myear, seqno, sep="_"), cemp_m)
+table(tab)
+
+# check dublettes
+dublettes <- strsplit(rownames(tab[tab>1]), "_")
+for (dub in dublettes)
+  print(subset(cemp_m, myear==as.numeric(dub[1]) & seqno==as.numeric(dub[2]), 
+               select=c(rlabo,myear,seqno,shipc,sdate,jmpst,speci,noins)))
+
+# Chech for dublettes of myear + seqno + rlabo
+tab <- xtabs(~paste(myear, seqno, rlabo, sep="_"), cemp_m)
+table(tab)
+```
+
+#### merge to add station + species to cemp_f
+```{r cemp_f_add_cemp_m_data}
+cemp_f <- merge(cemp_f, cemp_m[,c("myear", "seqno", "rlabo", "jmpst", "speci", "sdate")], 
+                by=c("myear", "seqno", "rlabo"), 
+                all.x=TRUE, all.y=FALSE)
+```
+
+## cemp_f2 = Pick records with species with N > 1000 
+```{r cemp_f2}
+tab <- table(cemp_f$speci)
+tab
+(spp <- names(tab[tab>1000]))
+# "GADU MOR" "LIMA LIM" "MYTI EDU" "NUCE LAP" "PLAT FLE"
+cemp_f2 <- subset(cemp_f, speci %in% spp)
+```
+
+## Weight-length plots
+```{r weight_length_plot1}
+ggplot(cemp_f2, aes(x=lnmea, y=wtmea, color=speci)) + geom_point() + facet_wrap(~inorb)
+```
+
+```{r weight_length_plot2}
+gg <- ggplot(subset(cemp_f, speci %in% "GADU MOR"), aes(x=lnmea, y=wtmea, color=speci)) + geom_point()
+gg + geom_vline(aes(xintercept=130))
+```
+
+## Clean cemp_f2 table
+```{r cemp_f2_weight_length_clean}
+#
+# Clean weigth and length
+#
+plot(wtmea~lnmea, data=subset(cemp_f2, lnmea < 130))
+sel <- with(cemp_f2, !is.na(lnmea) & lnmea < 130)
+sum(sel)
+cemp_f2$lnmea2 <- cemp_f2$lnmea
+cemp_f2$lnmea2[sel] <- cemp_f2$lnmea[sel]*10
+plot(wtmea~lnmea, data=subset(cemp_f2, lnmea > 130))
+points(wtmea~lnmea2, data=subset(cemp_f2, lnmea < 130), col="red")
+
+#
+#
+#
+plot(wtmea~lnmea2, cemp_f2)
+plot(wtmea~lnmea2, cemp_f2, ylim = c(0,650))
+plot(wtmea~lnmea2, cemp_f2, ylim = c(0,100))
+
+# Try weight in kg
+# Quite heavy. Maybe skrei? In this case we keep them so far!
+sel <- cemp_f2$wtmea < 40
+sum(sel, na.rm=TRUE)
+plot(wtmea~lnmea2, cemp_f2)
+points(cemp_f2$lnmea2[sel], 1000*cemp_f2$wtmea[sel], col="red")
+table(cemp_f2$myear[sel])
+
+#
+# A couple of more weight outliters set to NA
+#
+plot(wtmea~lnmea2, subset(cemp_f2, speci %in% "GADU MOR"), ylim=c(0, 3000))
+
+abline(h=1300, col=4, lty=2)
+abline(v=700, col=4, lty=2)
+sel <- with(cemp_f2, wtmea < 1300 & lnmea > 700 & speci %in% "GADU MOR")
+cemp_f2$wtmea[sel] <- NA
+
+# Be aware of one more outlier (ok weight for length, but just very big)
+plot(wtmea~lnmea2, subset(cemp_f2, speci %in% "GADU MOR"))
+
+#
+# Result
+#
+cemp_f2$lnmea <- cemp_f2$lnmea2
+plot(wtmea~lnmea, cemp_f2)
+```
+
+## Unique key combinations in the tables
+```{r tabulate_combinations_of_all_tables}
+# Combinations in sample table cemp_m
+tab <- xtabs(~myear + seqno + rlabo, cemp_m)
+table(tab)
+# Combinations in fish table cemp_f2
+tab <- xtabs(~myear + seqno + rlabo + subno, cemp_f2)
+table(tab)
+# Combinations in tissue table cemp_t
+tab <- xtabs(~myear + seqno + rlabo + subno + tissu, cemp_t)
+table(tab)
+# Combinations in concentration table cemp_c
+tab <- xtabs(~paste(myear, seqno, rlabo, subno, tissu, param, sep="_"), cemp_c)
+table(tab)
+# dublettes <- strsplit(rownames(tab[tab>2])[410:420], "_")
+# Example
+#dub <- strsplit(rownames(tab[tab>2])[420], "_")[[1]]
+#subset(cemp_c, myear==as.numeric(dub[1]) & seqno==as.numeric(dub[2]) & rlabo==dub[3] &
+#         subno==as.numeric(dub[4]) & tissu==dub[5], select=-c(vflag,qflag,basis,method,analys,unit,x))
+```
+
+
+Find out which valsnf (ie concentration) values that are non-numeric
+```{r cemp_c_fix_valsnf}
+# Look at the first sign
+first_sign <- substr(cemp_c$valsnf,1,1)
+table(first_sign)
+
+# The ones starting with N
+table(cemp_c$valsnf[first_sign %in% "N"])
+# ... are set to NA
+cemp_c$valsnf[first_sign %in% "N"] <- NA
+
+# Change to numeric
+cemp_c$valsnf <- as.numeric(cemp_c$valsnf)
+table(is.na(cemp_c$valsnf))
+```
+
+**NOTE:** You may stop here and skip to the `load_data`chunk
+
+
+## Chemical measurement table: cemp_c
+Dublettes in cemp_c
+```{r cemp_c_fix_dublettes1}
+comb <- with(cemp_c, paste(myear, seqno, rlabo, subno, tissu, param, repno, sep="_"))
+tab <- table(comb)
+table(tab)
+for (i in 1:10){
+  sel <- comb == names(tab[tab>1][i])
+  print(cemp_c[sel,])
+  }
+```
+
+```{r cemp_c_fix_dublettes2}
+#
+# Check duplicated data (note: grouping without repno)
+#
+by_param_cont <- subset(cemp_c, select=c(myear, seqno, rlabo, subno, tissu, param, valsnf)) %>% 
+                     group_by(myear, seqno, rlabo, subno, tissu, param)
+# We count the number of values
+cemp_c2_cont_n <- summarise(by_param_cont, n=n())
+# We count the number of distinct values of valsnf
+cemp_c2_cont_distinct <- by_param_cont %>% summarise_each(funs(first, last, n_distinct))
+
+# The should have the same number of rows:
+dim(cemp_c2_cont_distinct)
+dim(cemp_c2_cont_n)
+
+# Add number of values to the 'cemp_c2_cont_distinct' table
+cemp_c2_cont_distinct$n <- cemp_c2_cont_n$n 
+
+# Every year has ca 1-2% duplicates 
+xtabs(~myear + n, cemp_c2_cont_distinct)
+  
+# Only 1949, the 1980s, 1996 and 2007 have actually different values for the duplicates
+xtabs(~myear + n_distinct, cemp_c2_cont_distinct)
+
+# Check the ones in 2007:
+x <- subset(cemp_c2_cont_distinct, myear == 2007 & n_distinct > 1)
+dim(x)
+
+# Check the 20 first ones
+for (i in 1:20){
+  x_example <- x[i, 1:6]
+  dupl <- subset(cemp_c, myear %in% x_example$myear &
+                   seqno %in% x_example$seqno &
+                   rlabo %in% x_example$rlabo &
+                   subno %in% x_example$subno &
+                   tissu %in% x_example$tissu &
+                   param %in% x_example$param)
+  print(dupl)
+}
+
+```
+
+Also include repno
+NOTE: two very slow procedures here (7 minutes each)
+```{r cemp_c_fix_dublettes3}
+
+#
+# Check duplicated data
+#
+by_param_cont <- subset(cemp_c, select=c(myear, seqno, rlabo, subno, tissu, param, repno, valsnf)) %>% 
+                     group_by(myear, seqno, rlabo, subno, tissu, repno, param)
+# We count the number of values
+cemp_c2_cont_n <- summarise(by_param_cont, n=n())
+# We count the number of distinct values of valsnf
+cemp_c2_cont_distinct <- by_param_cont %>% summarise_each(funs(first, last, n_distinct))
+
+# The should have the same number of rows:
+dim(cemp_c2_cont_distinct)
+dim(cemp_c2_cont_n)
+
+# So we can add number of values to the 'cemp_c2_cont_distinct' table
+cemp_c2_cont_distinct$n <- cemp_c2_cont_n$n 
+
+# Every year has ca 1-2% duplicates 
+xtabs(~myear + n, cemp_c2_cont_distinct)
+  
+# But there are never different values for the duplicates
+xtabs(~myear + n_distinct, cemp_c2_cont_distinct)
+
+# So we just pick the first value of 'valsnf'
+cemp_c2_cont <- by_param_cont %>% summarise(valsnf = first(valsnf))
+
+#
+# Add inorb, vflag, qflag, unit
+#
+by_param_char <- subset(cemp_c, select=c(myear, seqno, rlabo, subno, tissu, param, repno, inorb, vflag, qflag, unit)) %>% 
+                     group_by(myear, seqno, rlabo, subno, tissu, param, repno)
+cemp_c2_char <- by_param_char %>% summarise_each(funs(first, last, n_distinct))
+cemp_c2_char_n <- by_param_char %>% summarise(n=n())
+
+if (dim(cemp_c2_char)[1] == dim(cemp_c2_char_n)[1]){
+  cemp_c2_char$n <- cemp_c2_char_n$n
+} else {
+  cat("Something is wrong - cemp_c2_char and cemp_c2_char_n should have the same nukber of rows")
+}
+
+head(cemp_c2_char)
+# Duplicates
+xtabs(~myear + inorb_n_distinct, cemp_c2_char)   # Some
+xtabs(~myear + vflag_n_distinct, cemp_c2_char)   # A lot
+xtabs(~myear + qflag_n_distinct, cemp_c2_char)   # None
+xtabs(~myear + unit_n_distinct, cemp_c2_char)    # Some
+
+xtabs(~inorb_n_distinct + vflag_n_distinct + unit_n_distinct, cemp_c2_char)
+# 1. vflag only: 5000 lines
+# 2. unit only: 195 lines
+# 3. unit + inorb: 257 lines
+
+#
+# Check out vflag
+# 
+
+# 5291 with different values
+xtabs(~ vflag_n_distinct, cemp_c2_char)
+# 5291 with different values
+xtabs(~ vflag_first + vflag_n_distinct, cemp_c2_char)
+xtabs(~ is.na(vflag_first) + vflag_n_distinct, cemp_c2_char)
+
+# Save the doublets of vflag
+vflag_doubles <- subset(cemp_c2_char, is.na(vflag_first) & vflag_n_distinct > 1)
+dim(vflag_doubles)
+head(vflag_doubles)
+
+# Check the 20 first ones
+for (i in 1:20 + 5000){
+  x_example <- vflag_doubles[i, ]
+  dupl <- subset(cemp_c, myear %in% x_example$myear &
+                   seqno %in% x_example$seqno &
+                   rlabo %in% x_example$rlabo &
+                   subno %in% x_example$subno &
+                   tissu %in% x_example$tissu &
+                   param %in% x_example$param)
+  print(dupl)
+}
+
+return_doublette_bool <- function(i){
+  x_example <- vflag_doubles[i, ]
+  with(cemp_c, myear %in% x_example$myear &
+                   seqno %in% x_example$seqno &
+                   rlabo %in% x_example$rlabo &
+                   subno %in% x_example$subno &
+                   tissu %in% x_example$tissu &
+                   param %in% x_example$param)
+  }
+
+load(file = "Milkys_Data_2016_01_18_doublette_vars.RData")  # doublette_no, equal_valsnf, equal_unit, equal_inorb
+
+#
+# Set doublette no variable
+# SLOW! 7 minutes
+#
+
+# UNCOMMENT TO RUN
+# doublette_no <- rep(NA, nrow(cemp_c))
+# for (i in 1:nrow(vflag_doubles)){
+#   doublette_no[return_doublette_bool(i)] <- i
+#   }
+# UNCOMMENT TO RUN (end)
+
+# Check that there are 2 for each number
+length(doublette_no)
+sum(!is.na(doublette_no))
+sum(!is.na(doublette_no))/2
+tab <- table(doublette_no)
+table(tab)
+
+#
+# Check if valsnf, unit and inorb are the same for all doublettes of vflag
+# SLOW! ca 7 minutes
+#
+
+# UNCOMMENT TO RUN
+# n <- nrow(vflag_doubles)
+# equal_valsnf <- rep(NA, n)
+# equal_unit <- rep(NA, n)
+# equal_inorb <- rep(NA, n)
+# for (i in 1:n) {
+#   dupl <- cemp_c[doublette_no == i,]
+#   equal_valsnf[i] <- dupl[1, "valsnf"]==dupl[2, "valsnf"]
+#   equal_unit[i] <- dupl[1, "unit"]==dupl[2, "unit"] | (is.na(dupl[1, "unit"]) & is.na(dupl[2, "unit"]))
+#   equal_inorb[i] <- dupl[1, "inorb"]==dupl[2, "inorb"]
+# }
+# 
+# mean(equal_valsnf)
+# mean(equal_unit, na.rm=TRUE)
+# mean(equal_inorb)
+# UNCOMMENT TO RUN (end)
+
+# Pick the ones with vflag = NA for deletion
+doublette_delete <- doublette_no
+doublette_delete[is.na(cemp_c$vflag)] <- NA
+
+# Check that there is 1 for each number
+tab <- table(doublette_delete)
+table(tab)
+
+# So we can delete all cases where vflag = NA as there exists a vflag = A for the same combination
+cemp_c_clean <- cemp_c[is.na(doublette_delete),]
+
+nrow(cemp_c)
+nrow(cemp_c_clean)
+
+# UNCOMMENT TO RUN
+# save(doublette_no, equal_valsnf, equal_unit, equal_inorb,
+#    file = "Milkys_Data_2016_01_18_doublette_vars.RData")
+# UNCOMMENT TO RUN (end)
+```
+
+
+## Based on cemp_c_clean we put together the data set again
+Tins are removed, since there are some observations which have tins both as individual and pooled samples (I or B)
+```{r cemp_c_fix_dublettes4}
+## First for categorical vars
+by_param_char <- subset(cemp_c_clean, select=c(myear, seqno, rlabo, subno, tissu, param, repno, inorb, vflag, qflag, unit)) %>% 
+                     group_by(myear, seqno, rlabo, subno, tissu, param, repno)
+cemp_c_char <- by_param_char %>% summarise_each(funs(first, last, n_distinct))
+cemp_c_char_n <- by_param_char %>% summarise(n=n())
+if (nrow(cemp_c_char) == nrow(cemp_c_char_n)){
+  cemp_c_char$n <- cemp_c_char_n$n
+} else {
+  cat("WARNING - Unequal no of rows!")
+}
+
+head(cemp_c_char)
+# Duplicates
+xtabs(~inorb_n_distinct, cemp_c_char)   
+xtabs(~vflag_n_distinct, cemp_c_char)
+xtabs(~qflag_n_distinct, cemp_c_char)  
+xtabs(~unit_n_distinct, cemp_c_char)  
+xtabs(~inorb_n_distinct+ unit_n_distinct, cemp_c_char)  
+# Also check NA values
+xtabs(~inorb_n_distinct+ unit_n_distinct + is.na(inorb_first), cemp_c_char)  
+xtabs(~inorb_n_distinct+ unit_n_distinct + is.na(unit_first), cemp_c_char)  
+
+# Check years - only 2006-2009
+xtabs(~myear + unit_n_distinct, cemp_c_char)  
+
+# Check parameters - only Tins (DBTIN, DPTIN, MBTIN, MPTIN, TPTIN) 
+tab <- xtabs(~param + unit_n_distinct, cemp_c_char)
+tab[tab[,2]>0,]
+par_tins <- rownames(tab)[tab[,2]>0]
+
+#
+# Have a look at 452 unit doublettes
+#   of which 257 also are inorb doublettes
+#
+
+# Save the doublets of unit 
+unit_doubles <- subset(cemp_c_char,  unit_n_distinct > 1)
+dim(unit_doubles)
+head(unit_doubles)
+
+return_doublette_bool <- function(i){
+  x_example <- unit_doubles[i, ]
+  with(cemp_c_clean, myear %in% x_example$myear &
+                   seqno %in% x_example$seqno &
+                   rlabo %in% x_example$rlabo &
+                   subno %in% x_example$subno &
+                   tissu %in% x_example$tissu &
+                   param %in% x_example$param)
+  }
+
+# check some examples, and check those in the fish table
+# Some are dog whelks (NUCE LAP), some are cod (GADU MOR)
+
+random_unit_doubles <- sample(1:nrow(unit_doubles), 20)
+for (i in random_unit_doubles){
+  x_example <- cemp_c_clean[return_doublette_bool(i),]
+  sel <- with(cemp_f2, myear %in% x_example$myear &
+                   seqno %in% x_example$seqno &
+                   rlabo %in% x_example$rlabo &
+                   subno %in% x_example$subno)
+  print(x_example)
+  print(cemp_f2[sel, "speci"])
+  }
+
+#
+# For now, we just delete all the tins
+#
+
+cemp_c_clean2 <- subset(cemp_c_clean, !param %in% par_tins)
+nrow(cemp_c_clean)
+nrow(cemp_c_clean2)
+```
+
+
+### Final check
+Based on cemp_c_clean2 we put together the data set again
+```{r cemp_c_fix_dublettes5}
+#
+# First for categorical vars
+#
+by_param_char <- subset(cemp_c_clean2, select=c(myear, seqno, rlabo, subno, tissu, param, repno, inorb, vflag, qflag, unit)) %>% 
+                     group_by(myear, seqno, rlabo, subno, tissu, param, repno)
+cemp_c_char <- by_param_char %>% summarise_each(funs(first, last, n_distinct))
+cemp_c_char_n <- by_param_char %>% summarise(n=n())
+if (nrow(cemp_c_char) == nrow(cemp_c_char_n)){
+  cemp_c_char$n <- cemp_c_char_n$n
+} else {
+  cat("WARNING - Unequal no of rows!")
+}
+
+head(cemp_c_char)
+# Duplicates
+xtabs(~inorb_n_distinct, cemp_c_char)   
+xtabs(~vflag_n_distinct, cemp_c_char)
+xtabs(~qflag_n_distinct, cemp_c_char)  
+xtabs(~unit_n_distinct, cemp_c_char)  
+# Only 1's!
+
+#
+# Then for the continuous vars
+#
+by_param_cont <- subset(cemp_c_clean2, select=c(myear, seqno, rlabo, subno, tissu, param, repno, valsnf)) %>% 
+                     group_by(myear, seqno, rlabo, subno, tissu, repno, param)
+cemp_c_cont_distinct <- by_param_cont %>% summarise_each(funs(first, last, n_distinct))
+# We count the number of values
+cemp_c_cont_n <- summarise(by_param_cont, n=n())
+
+
+# They should have the same number of rows:
+# So we can add number of values to the 'cemp_c_cont_distinct' table
+if (nrow(cemp_c_cont_distinct) == nrow(cemp_c_cont_n)){
+  cemp_c_cont_distinct$n <- cemp_c_cont_n$n 
+} else {
+  cat("WARNING - Unequal no of rows!")
+}
+
+# No duplicates... 
+xtabs(~n, cemp_c_cont_distinct)
+# ... and then of course always one distinct value
+xtabs(~n_distinct, cemp_c_cont_distinct)
+# again - yeah!
+```
+
+Combine categorical variables (inorb, vflag, qflag, unit) with continuous (valsnf).  
+This is the final "concentration" data file (used to )
+```{r cemp_c2_create}
+if (nrow(cemp_c_char) == nrow(cemp_c_cont_distinct)){
+  cemp_c2 <- cbind(cemp_c_char, cemp_c_cont_distinct[,"first"])
+} else {
+  cat("WARNING - Unequal no of rows!")
+  cemp_c2 <- NULL
+}
+cemp_c2 <- rename(cemp_c2, valsnf = first)
+cemp_c2 <- rename(cemp_c2, unit = unit_first, inorb = inorb_first, vflag=vflag_first, qflag=qflag_first)
+columns_to_remove <- colnames(cemp_c2) %in% c("inorb_last","vflag_last", "qflag_last", "unit_last",
+                                                    "inorb_n_distinct","vflag_n_distinct", 
+                                                    "qflag_n_distinct", "unit_n_distinct",
+                                                    "n")
+which(columns_to_remove)
+cemp_c2 <- cemp_c2[,!columns_to_remove]
+dim(cemp_c2)
+```
+
+Saved as R file
+```{r cemp_c2_save}
+save(cemp_c2, file="Milkys_Data_2016_01_18_cemp_c2.RData")
+save(cemp_c2, cemp_t, cemp_f2, cemp_m, file="Milkys_Data_2016_01_18_cemp_tables.RData")
+```
+
+Load all R files made/changed so far
+```{r cemp_c2_load}
+# load(file="Milkys_Data_2016_01_18_cemp_c2.RData")                # cemp_c2
+load(file="Milkys_Data_2016_01_18_cemp_tables.RData")            # cemp_c2, cemp_t, cemp_f2, cemp_m
+```
+
+## Combine
+
+- Fish table (cemp_f2): One line per combination of myear + seqno + rlabo + subno
+- Measurement table: Several lines per combination of myear + seqno + rlabo + subno
+- Tissue table (cemp_t): One line per combination of myear + seqno + rlabo + subno + tissu
+```{r cemp_c2_to_cemp_comb_leftjoin_with_tissue1}
+# tab <- xtabs(~myear + seqno + rlabo, cemp_m)
+# table(tab)
+# tab <- xtabs(~myear + seqno + rlabo + subno, cemp_f2)
+# table(tab)
+# tab <- xtabs(~myear + seqno + rlabo + subno + tissu, cemp_t)
+# table(tab)
+
+####################################################################################################
+#
+# Combine with tissue data
+#
+####################################################################################################
+
+#
+# Parameters
+#
+apply(!is.na(cemp_t), 2, sum)
+```
+
+### Comments of cemp_t
+Make liver colour variables
+```{r cemp_c2_to_cemp_comb_leftjoin_with_tissue2_comment_liver_colour}
+# comment 1
+tab <- table(cemp_t$cmnt1)
+tab[order(tab, decreasing=TRUE)][1:50]
+
+# comment 1 when it contains "liver"
+tab_liver <- tab[grepl("liver", names(tab), ignore.case=TRUE)]
+# tab_liver[order(tab_liver , decreasing=TRUE)][1:50]
+
+# Remove spaces around colon
+cmnt <- cemp_t$cmnt1
+cmnt2 <- gsub(" : ", ":", cmnt, fixed = TRUE)
+cmnt2 <- gsub(": ", ":", cmnt2 , fixed = TRUE)
+cmnt2 <- gsub(" :", ":", cmnt2 , fixed = TRUE)
+cmnt2 <- gsub(" is ", ":", cmnt2 , fixed = TRUE)
+cmnt2 <- gsub("lll", "ll", cmnt2 , fixed = TRUE)
+cmnt2 <- gsub("hh", "h", cmnt2 , fixed = TRUE)
+cmnt2 <- gsub("gellow", "yellow", cmnt2 , fixed = TRUE)
+cmnt2 <- tolower(cmnt2)
+
+containing_liver_colour <- grepl("liver colour:", cmnt2, ignore.case=TRUE) | grepl("liver colour", cmnt2, ignore.case=TRUE)
+sum(containing_liver_colour)
+
+# cmnt3 below is a "blind alley", was made only in order to print out a bunch of colur codes (below, we continue form cmnt2)
+cmnt3 <- sub("liver colour:", "", cmnt2 , fixed = TRUE)
+cmnt3[!containing_liver_colour] <- NA
+tab_livercolour <- table(cmnt3)
+tab_livercolour <- tab_livercolour[order(tab_livercolour, decreasing=TRUE)]
+nm <- names(tab_livercolour)
+# for printing, avoid some long ones
+sel <- !substr(nm,1,4)=="part" & nchar(nm) <= 20
+nm[sel]
+
+
+# cmnt2 still has the same length as the data:
+length(cmnt2)
+
+str_cols <- c("yellow","brown","red","white","grey","green","pink")
+
+#
+# Make boolean matrix for colours in comment 1, with 8 rows (colors) and 30259 columns
+#
+containing_colour_matrix1 <- aaply(str_cols, 1, function(string) grepl(string, cmnt2, ignore.case=TRUE) & containing_liver_colour)
+dim(containing_colour_matrix1)
+apply(containing_colour_matrix1, 1, sum)
+
+
+#
+# Make boolean matrix for colours in comment 2
+#
+# All those with liver colour in column 1
+at_least_one_color_column1 <- apply(containing_colour_matrix1, 2, sum) > 0
+sum(at_least_one_color_column1 & containing_liver_colour)
+
+# All those which probably has liver colour in column 2
+sum(!at_least_one_color_column1 & containing_liver_colour)
+
+# Column 2
+cmntcol2 <- cemp_t$cmnt2
+cmntcol2 <- tolower(cmntcol2)
+# We are only interested in the cases where column 1 contains no colours, but contains the word "liver colour"
+cmntcol2[at_least_one_color_column1 | !containing_liver_colour] <- NA
+
+# Find colours in column 2
+containing_colour_matrix2 <- aaply(str_cols, 1, function(string) grepl(string, cmntcol2, ignore.case=TRUE))
+dim(containing_colour_matrix2)
+apply(containing_colour_matrix2, 1, sum)
+
+# Add colours from column 1 and column 2
+containing_colour_matrix_sum <- containing_colour_matrix1 + containing_colour_matrix2
+# Turn it in the right direction
+containing_colour_matrix_sum <- t(containing_colour_matrix_sum)
+
+containing_colour_matrix_sum <- data.frame(containing_colour_matrix_sum)
+colnames(containing_colour_matrix_sum) <- paste("Liver", str_cols, sep="_")
+str(containing_colour_matrix_sum)
+
+# The mostcommon color combinations: yellow-red
+# summarise
+comb <- containing_colour_matrix_sum %>% 
+  group_by(Liver_yellow, Liver_brown, Liver_red, Liver_white, Liver_grey, Liver_green, Liver_pink)
+combsumm <- summarise(comb, n=n())
+# sort
+combsumm <- combsumm[order(combsumm$n, decreasing=TRUE),]
+combsumm
+ 
+#
+# Add color variables to cemp_t 
+#
+
+cemp_t <- cbind(cemp_t, containing_colour_matrix_sum)
+
+#
+# Some more checking
+#
+# Check Comment 2
+tab <- table(cemp_t$cmnt2)
+tab[order(tab, decreasing=TRUE)][1:20]
+
+# Check Comment 2 when comment 1 EQUALS "liver colour" and little else
+nc <- nchar(names(tab_livercolour))
+tab2 <- tab_livercolour[order(nc, decreasing=FALSE)][1:20]
+tab2
+
+# Check comment 3
+tab <- table(cemp_t$cmnt3)
+tab[order(tab, decreasing=TRUE)][1:5]
+```
+
+Make "compound" liver colour `Liver_color`
+```{r }
+colnames_cols <- paste("Liver", str_cols, sep="_")
+colour_df <- cemp_t[, colnames_cols]
+no_col <- apply(colour_df, 1, sum)
+table(no_col)
+#head(colour_df)
+for (i in seq_along(colnames_cols)){
+  colour_df[,i] <- as.character(colour_df[,i])
+  colour_df[,i] <- sub(0, "", colour_df[,i])
+  colour_df[,i] <- sub(1, str_cols[i], colour_df[,i])
+  }
+table(colour_df$Liver_yellow)
+# colour_df$Liver_color <- paste(colour_df$Liver_yellow, colour_df$Liver_red, sep="-")
+colour_df$Liver_color <- with(colour_df, 
+                              paste(Liver_yellow, Liver_brown, Liver_red, 
+                                    Liver_white, Liver_grey, Liver_green, Liver_pink, sep = "-"))
+table(colour_df$Liver_color)
+
+# Replace one or more hyphens with a single hyphen
+colour_df$Liver_color <- gsub("-+", "-", colour_df$Liver_color)
+# Remove hyphen at start
+colour_df$Liver_color <- gsub("^-", "", colour_df$Liver_color)
+# Remove hyphen at end
+colour_df$Liver_color <- gsub("-$", "", colour_df$Liver_color)
+table(colour_df$Liver_color)
+
+# Add Liver_color to cemp_t
+cemp_t$Liver_color <- colour_df$Liver_color
+```
+
+```{r}
+cemp_t2 <- cemp_t
+```
+
+#### Merge cemp_t2 with cemp_c2 to create cemp_comb
+```{r cemp_c2_to_cemp_comb_leftjoin_with_tissue3}
+# Define parameters
+key_pars <- c("myear", "seqno", "rlabo", "subno","tissu")
+extra_pars <- c("tiswt","drywt","exlip","exlim","tiswtx","drywtx","fatwtx","gmlim", paste("Liver", str_cols, sep="_"))
+
+# Merge
+cemp_comb <- merge(cemp_c2, cemp_t2[,c(key_pars, extra_pars)], 
+                   by=key_pars,
+                   all.x=TRUE, all.y=FALSE)
+
+# Check data
+comb <- cemp_comb %>% group_by(myear, seqno, rlabo, subno, tissu, repno, param) %>% summarise(n=n())
+xtabs(~n, comb)
+```
+
+### Comments of cemp_f
+```{r cemp_c2_to_cemp_comb_leftjoin_with_fish1_comment_disease}
+# Parameters
+apply(!is.na(cemp_f2), 2, sum)
+
+# comment 1
+# Much Cryptocotyle lingua (svartprikksyke, en trematode)
+tab <- table(cemp_f2$cmnt1)
+tab[order(tab, decreasing=TRUE)][1:50]
+sum(grepl("Cryptocotyle lingua", cemp_f2$cmnt1, ignore.case=TRUE))
+sum(grepl("Cryptocotyle", cemp_f2$cmnt1, ignore.case=TRUE))
+sum(grepl("lingua", cemp_f2$cmnt1, ignore.case=TRUE))
+sum(grepl("Anisakis simplex", cemp_f2$cmnt1, ignore.case=TRUE))
+sum(grepl("Anisakis", cemp_f2$cmnt1, ignore.case=TRUE))
+sum(grepl("simplex", cemp_f2$cmnt1, ignore.case=TRUE))
+sum(grepl("ulceration", cemp_f2$cmnt1, ignore.case=TRUE))
+sum(grepl("ulcer", cemp_f2$cmnt1, ignore.case=TRUE))
+sum(grepl("lymphocytic", cemp_f2$cmnt1, ignore.case=TRUE))
+sum(grepl("lesion", cemp_f2$cmnt1, ignore.case=TRUE))
+sum(grepl("caligiform copepod", cemp_f2$cmnt1, ignore.case=TRUE))  # sea louse = Caligidae
+sum(grepl("caligiform", cemp_f2$cmnt1, ignore.case=TRUE))
+sum(grepl("Caligus", cemp_f2$cmnt1, ignore.case=TRUE))
+sum(grepl("Lepeophtheirus", cemp_f2$cmnt1, ignore.case=TRUE))
+
+cemp_f2$Cryptocotyle_lingua <- grepl("Cryptocotyle lingua", cemp_f2$cmnt1, ignore.case=TRUE)
+cemp_f2$Anisakis <- grepl("Anisakis", cemp_f2$cmnt1, ignore.case=TRUE)
+cemp_f2$Ulceration <- grepl("Ulceration", cemp_f2$cmnt1, ignore.case=TRUE)
+cemp_f2$Caligiform <- grepl("Caligiform", cemp_f2$cmnt1, ignore.case=TRUE)
+```
+
+```{r}
+save(cemp_f2, cemp_t2, file="Milkys_Data_2016_01_18_cemp_f2_and_t2.RData")
+```
+
+#### Actual merging
+Add columns to `cemp_comb` by merge with `cemp_f2` (which already contains jmpst and speci from cemp_m)
+```{r cemp_c2_to_cemp_comb_leftjoin_with_fish2}
+key_pars <- c("myear", "seqno", "rlabo", "subno")
+extra_pars <- c("lnmin","lnmax","lnmea","lnstd",
+  "wtmin","wtmax","wtmea","wtstd","sexco",
+  "agmin","agmax","agmea",
+  "gonwt","shlwt","agdet",
+  "shlwtx","tiswtx",
+  "imposex_sh","imposex_pe","imposex_stage",
+  "jmpst","speci","sdate","lnmea2",
+  "Cryptocotyle_lingua","Anisakis","Ulceration","Caligiform")
+
+cemp_comb <- merge(cemp_comb, cemp_f2[c(key_pars, extra_pars)],  
+                   by=key_pars,
+                   all.x=TRUE, all.y=FALSE)
+
+# str(cemp_comb)
+tab <- xtabs(~myear + jmpst, cemp_comb)
+dim(tab)
+# stem(apply(tab, 2, sum))
+tab[,apply(tab, 2, sum) > 2000]
+
+colnames(cemp_comb )
+```
+
+# Check tiswt, tiswtx.x and tiswtx.y
+tiswt and tiswtx.x come from the tissue table (cemp_t)
+tiswtx.y comes from the fish table (cemp_f)
+```{r cemp_comb_check_tissue_weight}
+find_variable <- function(dataset, searchstring){
+  colnames(dataset)[grepl(searchstring, colnames(dataset), ignore.case=TRUE)]
+  }
+
+find_variable(cemp_c, "tiswt")
+find_variable(cemp_t, "tiswt")
+find_variable(cemp_f, "tiswt")
+
+tiswt_diff1 <- with(cemp_comb, tiswtx.x - tiswt)
+tiswt_diff2 <- with(cemp_comb, tiswtx.y - tiswt)
+tiswt_diff3 <- with(cemp_comb, tiswtx.y - tiswtx.x)
+
+perc_difference <- function(x,y) 100*(x-y)/y
+quantile(perc_difference(cemp_comb$tiswtx.x, cemp_comb$tiswt), (0:20)/20, na.rm=TRUE)
+quantile(perc_difference(cemp_comb$tiswtx.y, cemp_comb$tiswt), (0:20)/20, na.rm=TRUE)
+quantile(perc_difference(cemp_comb$tiswtx.y, cemp_comb$tiswtx.x), (0:20)/20, na.rm=TRUE)
+
+# 48 cases with >1% difference (more than 5% in all cases)
+sum(perc_difference(cemp_comb$tiswtx.y, cemp_comb$tiswtx.x) > 1, na.rm=TRUE)
+
+# Check those - all are blue mussel in 1992
+i <- which(perc_difference(cemp_comb$tiswtx.y, cemp_comb$tiswtx.x) > 5)
+length(i)
+cemp_comb[i, c("speci", "myear", "param")]
+
+# We delete cemp_comb$tiswtx.y and renames cemp_comb$tiswtx,x
+cemp_comb$tiswtx.y <- NULL
+cemp_comb <- dplyr::rename(cemp_comb, tiswtx = tiswtx.x)
+```
+
+### Final check for duplicates
+```{r cemp_comb_check_for_duplicates}
+# Number of uniques
+comb <- cemp_comb %>% group_by(myear, seqno, rlabo, subno, tissu, repno, param) %>% summarise(n=n)
+xtabs(~n, comb)
+# tab
+#     1 
+# 318654
+```
+
+## Save data (and param_be, which contains the names of biological effect parameters)
+```{r}
+save(cemp_comb, file="Milkys_Data_2016_01_18_cemp_combinedtable.RData")
+```
+
+## A bunch of plots of biological variables
+```{r}
+xtabs(~param, cemp_comb)
+ggplot(subset(cemp_comb, param=="LNMEA"), aes(x=myear, y=valsnf)) + geom_point()
+ggplot(subset(cemp_comb, param=="EROD"), aes(x=myear, y=valsnf)) + geom_point()
+
+# ggplot(cemp_f2, aes(x=myear, y=lnmea)) + geom_point() + facet_wrap(~inorb)
+# ggplot(cemp_f2, aes(x=myear, y=agmea)) + geom_point() + facet_wrap(~inorb)
+# ggplot(cemp_f2, aes(x=agmea, y=lnmea)) + geom_point() + facet_wrap(~inorb)
+# ggplot(cemp_f2, aes(x=lnmea, y=wtmea)) + geom_point() + facet_wrap(~inorb)
+# ggplot(cemp_f2, aes(x=lnmea, y=wtmea)) + geom_point() + facet_wrap(~inorb)
+```
+
