@@ -526,6 +526,135 @@ cemp_f3 %>%
 
 ```
 
+## cemp_specimen_1: add live variables to cemp_t2  
+
+### Select and rename columns  
+
+```{r}
+table(addNA(cemp_t2$tissu))
+
+# names(cemp_t2) %>% dput()
+
+selected_columns <- c(
+  "myear", "seqno", "rlabo", "subno","tissu",
+  "tiswt", "drywt", "exlip", "exlim",
+  "cmnt1", "cmnt2", "cmnt3", "cmnt4", "cmnt5",
+  "Liver_yellow", "Liver_brown", 
+  "Liver_red", "Liver_white", "Liver_grey", "Liver_green", "Liver_pink", 
+  "Liver_color")
+
+cemp_liver <- cemp_t2[selected_columns] %>% 
+  filter(tissu == "LI") 
+apply(is.na(cemp_liver), 2, mean)
+
+for (col in c("tiswt", "drywt", "exlip", "exlim",
+                "cmnt1", "cmnt2", "cmnt3", "cmnt4", "cmnt5")){
+  sel <- colnames(cemp_liver) %in% col
+  colnames(cemp_liver)[sel] <- paste0("Liver_", col)
+}
+
+
+```
+
+
+### Merge
+```{r}
+
+# Define parameters
+key_pars <- c("myear", "seqno", "rlabo", "subno")
+
+cemp_specimen_1 <- cemp_f2 %>%
+  left_join(cemp_liver, by = key_pars, relationship = "many-to-one")
+
+```
+
+
+### Add liver fat weight  
+
+```{r}
+
+load("data_input/Milkys_Data_2017_02_14_cemp_c2.RData")                # cemp_c2
+
+key_pars <- c("myear", "seqno", "rlabo", "subno", "tissu")
+
+cemp_c2 %>% filter(tissu == "LI") %>% xtabs(~param, .)
+
+```
+
+#### make 
+
+```{r}
+
+check <- cemp_c2 %>%
+  filter(tissu == "LI" & param %in% c("EXLIP", "FETT")) %>%
+  add_count(myear, seqno, rlabo, subno) %>%
+  filter(n > 1) %>%
+  arrange(myear, seqno, rlabo, subno)
+
+check2 <- check %>%
+  select(myear, seqno, rlabo, subno, param, valsnf) %>%
+  tidyr::pivot_wider(names_from = param, values_from = valsnf)
+  
+check3 <- check2 %>%
+  filter(abs(EXLIP - FETT) > 0.1)
+
+if (nrow(check3) > 0)
+  stop("some EXLIP differs from FETT by >0.1")
+
+check4 <- check %>%
+  select(myear, seqno, rlabo, subno, param, qflag) %>%
+  tidyr::pivot_wider(names_from = param, values_from = qflag)
+  
+check5 <- check4 %>%
+  filter(EXLIP != FETT)
+
+if (nrow(check5) > 0)
+  stop("some EXLIP flags differs from FETT flags")
+
+cemp_c2_liverfat_1 <- 
+  cemp_c2[c(key_pars, "param", "valsnf", "qflag", "unit")] %>% 
+  filter(tissu == "LI" & param %in% c("EXLIP", "FETT")) %>%
+  select(myear, seqno, rlabo, subno, param, valsnf, qflag, unit)
+
+cemp_c2_liverfat <- cemp_c2_liverfat_1 %>%
+  group_by(myear, seqno, rlabo, subno) %>%
+  summarize(
+    valsnf = first(valsnf), 
+    qflag = first(qflag), 
+    unit = first(unit), .groups = "drop"
+  ) %>%
+  rename(liverfat = valsnf, 
+         liverfat_flag = qflag, 
+         liverfat_unit = unit)
+  
+```
+
+#### cemp_specimen_2 created by merge 
+```{r}
+
+cemp_specimen_2 <- cemp_specimen_1 %>%
+  left_join(cemp_c2_liverfat, by = c("myear", "seqno", "rlabo", "subno"), 
+            relationship = "many-to-one")
+
+```
+
+### Save/export  
+
+```{r}
+
+fn <- "data/cemp_specimen_2.rds"
+if (!file.exists(fn))
+  saveRDS(cemp_specimen_2, fn)
+
+# Read file back
+# cemp_specimen_2 <- readRDS("data/cemp_specimen_2.rds")
+
+fn <- "data/cemp_specimen_2.rds"
+if (!file.exists(fn))
+  readr::write_csv(cemp_specimen_2, fn)
+
+```
+
 
 ## Unique key combinations in the tables
 ```{r tabulate_combinations_of_all_tables}
@@ -625,6 +754,7 @@ for (i in 1:20){
 }
 
 ```
+
 
 ### cemp_c_clean: create by also including repno (SLOW)
 
