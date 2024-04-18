@@ -21,9 +21,24 @@ library(stringr)
 source("020_Get_fish_individual_data_functions.R")
 ```
 
+## Year and names  
+```{r}
+
+year <- 2018
+filename_save_rds <- "020_Fish_individual_data_2018.rds"
+filename_save_csv <- "020_Fish_individual_data_2018.rds"
+datafolder <- "data_input/Milkys_opparbeiding_fisk_2018/"
+
+check <- grepl(as.character(year), 
+               filename_save_rds, filename_save_csv, datafolder)
+
+if (mean(check) != 1)
+  stop("Check file names and folder - years must correspond!")
+
+```
+
 ## Files
 ```{r}
-datafolder <- "data_input/Milkys_opparbeiding_fisk_2018/"
 fns <- dir(datafolder, "*.xls*")
 fns <- fns[substr(fns,1,1) != "~"]   # 'locked' file (remove opened excel files)
 
@@ -35,8 +50,8 @@ sel <- fns %in% c("ikke_bruk_milkys data 2018 Svalbard og Tromsø - akvaplan-niv
 fns <- fns[!sel]
 
 # For now, alos delete this:  
-sel <- "2018_Brosme_S2_Sørfjorden.xlsx"
-fns <- fns[!sel]
+# sel <- fns %in% "2018_Brosme_S2_Sørfjorden.xlsx"
+# fns <- fns[!sel]
 
 fns
 
@@ -200,10 +215,12 @@ dat_list_selected %>% map(~unique(.$Station))
 
 ```
 
+
+### Check/fix Species (NOTE: HARD-CODED FILE NUMBERS)
+
+
 ```{r}
-#
-# Check Species (NOTE: HARD-CODED FILE NUMBERS)
-#
+cat("Before:\n")
 dat_list_selected %>% map_chr(~unique(.$Species))
 
 for (j in seq_along(dat_list_selected)){
@@ -212,10 +229,12 @@ for (j in seq_along(dat_list_selected)){
       Species = as.character(Species),
       Species = case_when(
         Species == "GADMO" ~ "Torsk",
+        Station %in% c("43B2","96B","43B") ~ "Torsk",
         TRUE ~ Species)
     )
 }
 
+cat("After:\n")
 dat_list_selected %>% map_chr(~unique(.$Species))
 
 ```
@@ -345,8 +364,6 @@ ggplot(dat, aes(Length, Age, color = Species)) +
 ## Save  
 ```{r}
 
-filename_save_rds <- "020_Fish_individual_data_2018.rds"
-filename_save_csv <- "020_Fish_individual_data_2018.rds"
 saveRDS(dat, paste0("Data/", filename_save_rds))
 write.csv(dat, paste0("Data/", filename_save_csv), fileEncoding = "UTF-8") 
 
