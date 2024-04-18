@@ -26,7 +26,7 @@ source("020_Get_fish_individual_data_functions.R")
 
 year <- 2018
 filename_save_rds <- "020_Fish_individual_data_2018.rds"
-filename_save_csv <- "020_Fish_individual_data_2018.rds"
+filename_save_csv <- "020_Fish_individual_data_2018.csv"
 datafolder <- "data_input/Milkys_opparbeiding_fisk_2018/"
 
 check <- grepl(as.character(year), 
@@ -365,7 +365,7 @@ ggplot(dat, aes(Length, Age, color = Species)) +
 ```{r}
 
 saveRDS(dat, paste0("Data/", filename_save_rds))
-write.csv(dat, paste0("Data/", filename_save_csv), fileEncoding = "UTF-8") 
+readr::write_csv(dat, paste0("Data/", filename_save_csv)) 
 
 ```
 
