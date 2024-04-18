@@ -124,7 +124,7 @@ so it will find both 'lengde (cm)' and 'Lengde (cm)'
 # Get column name for a given column number 
 get_colname <- function(df, colnumber) colnames(df)[colnumber]
 
-# Correct one column in one file
+# Correct one column in one file:
 # View(dat_list[[3]])
 dat_list[[3]] <- dat_list[[3]] %>%
   rename(Levervekt = Lever)
@@ -171,32 +171,51 @@ dat_list_selected <- dat_list %>%
 ```
 
 ## Make data frame list ready for combining, part 1  
+
+### Fix Station column 1
 ```{r}
-#
-# Check Station
-#
 cat("Existing values of in data:\n")
-dat_list_selected %>% map_chr(~unique(.$Station))
+dat_list_selected %>% map(~unique(.$Station))  
 
-# Fix stations  (NOTE: HARD-CODED FILE NUMBERS)
+for (j in seq_along(dat_list_selected)){
+  dat_list_selected[[j]] <- as.data.frame(dat_list_selected[[j]])
+  dat_list_selected[[j]][,1] <- dat_list_selected[[j]][,1] %>% 
+    str_extract("([^[[:blank:]]]+)") %>%
+    toupper()
+}
+cat("New values of in data:\n")
+dat_list_selected %>% map(~unique(.$Station))  
+
+```
+
+### Fix Station column 2
+```{r}
 cat("\n\nStations - Get file names:\n")
-fns_to_read[c(2,3,4,5,14)]
-dat_list_selected[[3]]$Station <- "13B"
-dat_list_selected[[3]]$Station <- "15B"
-dat_list_selected[[4]]$Station <- "19B"
-dat_list_selected[[5]]$Station <- "30B"
-dat_list_selected[[14]]$Station <- "53B"
-# We will fix those "code + name" stations later
+fns_to_read[c(13,18)]
 
-#
-# Check Station again
-#
-cat("Existing values of in data:\n")
-dat_list_selected %>% map_chr(~unique(.$Station))
+dat_list_selected[[13]]$Station <- "43B"    # HARD-CODED!
+dat_list_selected[[18]]$Station <- "96B"
 
+dat_list_selected %>% map(~unique(.$Station))  
+
+```
+
+```{r}
 #
 # Check Species (NOTE: HARD-CODED FILE NUMBERS)
 #
+dat_list_selected %>% map_chr(~unique(.$Species))
+
+for (j in seq_along(dat_list_selected)){
+  dat_list_selected[[j]] <- dat_list_selected[[j]] %>% 
+    mutate(
+      Species = as.character(Species),
+      Species = case_when(
+        Species == "GADMO" ~ "Torsk",
+        TRUE ~ Species)
+    )
+}
+
 dat_list_selected %>% map_chr(~unique(.$Species))
 
 ```
@@ -266,23 +285,25 @@ apply(!is.na(dat), 2, mean)
 
 ## Check lacking data (2)
 
-### Fraction OK data per station
+### Fraction OK data per station  
+- numeric data only
 ```{r}
 
 dat %>%
-  select(-Species, -Kjønn, -Liver_color) %>%
+  select(-Species, -Kjønn, -Liver_color, -Otolittform) %>%
   tidyr::pivot_longer(-STATION_CODE, names_to = "Variable", values_to = "Value") %>%
   group_by(STATION_CODE, Variable) %>%
-  summarise(Fraction_ok = mean(is.finite(Value))) %>%
+  summarise(Fraction_ok = round(mean(is.finite(Value)), 2)) %>%
   tidyr::pivot_wider(names_from = "Variable", values_from = "Fraction_ok")
 
 ```
 
 ### Number of OK data per station
+- numeric data only
 ```{r}
 
 dat %>%
-  select(-Species, -Kjønn, -Liver_color) %>%
+  select(-Species, -Kjønn, -Liver_color, -Otolittform) %>%
   tidyr::pivot_longer(-STATION_CODE, names_to = "Variable", values_to = "Value") %>%
   group_by(STATION_CODE, Variable) %>%
   summarise(Number_ok = sum(is.finite(Value))) %>%
@@ -297,6 +318,7 @@ ggplot(dat, aes(Length, Weight, color = Species)) +
   geom_point() +
   facet_wrap(~STATION_CODE)
 ```
+
 ## Test plot 2
 ```{r, fig.width=9, fig.height=6}
 ggplot(dat, aes(Weight, Gonad_weight, color = Species)) +
@@ -313,6 +335,7 @@ ggplot(dat, aes(Weight, Liver_weight, color = Species)) +
 
 ## Test plot 4
 ```{r, fig.width=9, fig.height=6}
+
 ggplot(dat, aes(Length, Age, color = Species)) +
   geom_point() +
   facet_wrap(~STATION_CODE)
@@ -322,8 +345,10 @@ ggplot(dat, aes(Length, Age, color = Species)) +
 ## Save  
 ```{r}
 
-saveRDS(dat, "Data/150_Fish_individual_data_2019.rds")
-write.csv(dat, "Data/150_Fish_individual_data_2019.csv", fileEncoding = "UTF-8") 
+filename_save_rds <- "020_Fish_individual_data_2018.rds"
+filename_save_csv <- "020_Fish_individual_data_2018.rds"
+saveRDS(dat, paste0("Data/", filename_save_rds))
+write.csv(dat, paste0("Data/", filename_save_csv), fileEncoding = "UTF-8") 
 
 ```
 
