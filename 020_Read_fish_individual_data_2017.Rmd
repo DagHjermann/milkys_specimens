@@ -7,7 +7,7 @@ output:
     keep_md: true
 ---
 
-- copy of `150_Get_fish_individual_data_2019.Rmd` from Milkys2 project in Jupyterhub
+- adapted from `150_Get_fish_individual_data_2019.Rmd` from Milkys2 project in Jupyterhub
 - which again is based on '03_Read_fish_individual_data.Rmd' from Milkys2 in Jupyterhub  
 
 ## Libraries
@@ -24,10 +24,10 @@ source("020_Get_fish_individual_data_functions.R")
 ## Year and names  
 ```{r}
 
-year <- 2018
-filename_save_rds <- "020_Fish_individual_data_2018.rds"
-filename_save_csv <- "020_Fish_individual_data_2018.csv"
-datafolder <- "data_input/Milkys_opparbeiding_fisk_2018/"
+year <- 2017
+filename_save_rds <- "020_Fish_individual_data_2017.rds"
+filename_save_csv <- "020_Fish_individual_data_2017.csv"
+datafolder <- "data_input/Milkys_opparbeiding_fisk_2017/"
 
 check <- grepl(as.character(year), 
                filename_save_rds, filename_save_csv, datafolder)
@@ -44,14 +44,9 @@ fns <- fns[substr(fns,1,1) != "~"]   # 'locked' file (remove opened excel files)
 
 # fns %>% dput()
 
-sel <- fns %in% c("ikke_bruk_milkys data 2018 Svalbard og Tromsø - akvaplan-niva.xlsx", 
-                  "MILKYS+Lange tidsserier - analyser 2018.xlsx", "oversikt_over_fisk_2018.xlsx",
-                  "2018_MAL-FISK-stasjonskode_stasjonsnavn.xlsx")
-fns <- fns[!sel]
-
 # For now, alos delete this:  
-# sel <- fns %in% "2018_Brosme_S2_Sørfjorden.xlsx"
-# fns <- fns[!sel]
+sel <- fns %in% "Tromsø og Svalbard 2017_ikke_ihh_til_mal.xlsx"
+fns <- fns[!sel]
 
 fns
 
@@ -203,13 +198,16 @@ dat_list_selected %>% map(~unique(.$Station))
 
 ```
 
-### Fix Station column 2
+### Fix Station column 2  
+
+- set station names in data based on file name  
+- note; HARD-CODED!
+ 
 ```{r}
 cat("\n\nStations - Get file names:\n")
-fns_to_read[c(13,18)]
-
-dat_list_selected[[13]]$Station <- "43B"    # HARD-CODED!
-dat_list_selected[[18]]$Station <- "96B"
+#fns_to_read[c(13,18)]
+#dat_list_selected[[13]]$Station <- "43B"    # HARD-CODED!
+#dat_list_selected[[18]]$Station <- "96B"
 
 dat_list_selected %>% map(~unique(.$Station))  
 
