@@ -24,10 +24,10 @@ source("020_Get_fish_individual_data_functions.R")
 ## Year and names  
 ```{r}
 
-year <- 2017
-filename_save_rds <- "020_Fish_individual_data_2017.rds"
-filename_save_csv <- "020_Fish_individual_data_2017.csv"
-datafolder <- "data_input/Milkys_opparbeiding_fisk_2017/"
+year <- 2016
+filename_save_rds <- "020_Fish_individual_data_2016.rds"
+filename_save_csv <- "020_Fish_individual_data_2016.csv"
+datafolder <- "data_input/Milkys_opparbeiding_fisk_2016/"
 
 check <- grepl(as.character(year), 
                filename_save_rds, filename_save_csv, datafolder)
@@ -44,8 +44,9 @@ fns <- fns[substr(fns,1,1) != "~"]   # 'locked' file (remove opened excel files)
 
 # fns %>% dput()
 
-# For now, alos delete this:  
-sel <- fns %in% "Tromsø og Svalbard 2017_ikke_ihh_til_mal.xlsx"
+# delete this:  
+sel <- fns %in% c("backup av MAL.xlsx", 
+"Indre_oslofjord_MPB_torsk.xlsx", "MAL-FISK-stasjonskode_stasjonsnavn.xlsx")
 fns <- fns[!sel]
 
 fns
@@ -136,8 +137,8 @@ get_colname <- function(df, colnumber) colnames(df)[colnumber]
 
 # Correct one column in one file:
 # View(dat_list[[3]])
-dat_list[[3]] <- dat_list[[3]] %>%
-  rename(Levervekt = Lever)
+# dat_list[[3]] <- dat_list[[3]] %>%
+#   rename(Levervekt = Lever)
 
 # Get all column names, by column number 
 for (i in seq_along(dat_list)){
@@ -227,7 +228,7 @@ for (j in seq_along(dat_list_selected)){
       Species = as.character(Species),
       Species = case_when(
         Species == "GADMO" ~ "Torsk",
-        Station %in% c("43B2","96B","43B") ~ "Torsk",
+        #Station %in% c("43B2","96B","43B") ~ "Torsk",
         TRUE ~ Species)
     )
 }
@@ -274,14 +275,14 @@ nrow(dat)
 
 xtabs(~addNA(Station), dat)
 
-dat <- dat %>% 
+dat <- dat %>%
   mutate(STATION_CODE = stringr::str_extract(Station, "([^[[:blank:]]]+)") ) %>%
   mutate(STATION_CODE = sub("b", "B", STATION_CODE)) %>%
-  mutate(STATION_CODE = ifelse(STATION_CODE %in% "43B", "43B2", STATION_CODE)) %>%  # 43B2 is the present code
-  mutate(Species = stringr::str_to_sentence(Species)) %>%   # 'torsk' => 'Torsk'
+  #mutate(STATION_CODE = ifelse(STATION_CODE %in% "43B", "43B2", STATION_CODE)) %>%  # 43B2 is the present code
+  #mutate(Species = stringr::str_to_sentence(Species)) %>%   # 'torsk' => 'Torsk'
   select(-Station) %>%
   rename(Fish_no = Fisknr,
-         Length = Lengde, 
+         Length = Lengde,
          Weight = Vekt,
          Liver_weight = Levervekt,
          Liver_color = Leverfarge,
