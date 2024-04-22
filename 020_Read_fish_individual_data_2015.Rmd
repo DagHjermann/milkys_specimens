@@ -24,10 +24,10 @@ source("020_Get_fish_individual_data_functions.R")
 ## Year and names  
 ```{r}
 
-year <- 2017
-filename_save_rds <- "020_Fish_individual_data_2017.rds"
-filename_save_csv <- "020_Fish_individual_data_2017.csv"
-datafolder <- "data_input/Milkys_opparbeiding_fisk_2017/"
+year <- 2015
+filename_save_rds <- "020_Fish_individual_data_2015.rds"
+filename_save_csv <- "020_Fish_individual_data_2015.csv"
+datafolder <- "data_input/Milkys_opparbeiding_fisk_2015/"
 
 check <- grepl(as.character(year), 
                filename_save_rds, filename_save_csv, datafolder)
@@ -45,7 +45,9 @@ fns <- fns[substr(fns,1,1) != "~"]   # 'locked' file (remove opened excel files)
 # fns %>% dput()
 
 # For now, alos delete this:  
-sel <- fns %in% "Tromsø og Svalbard 2017_ikke_ihh_til_mal.xlsx"
+sel <- fns %in% c(
+  "ny_13B_Kr_sand_lis_2016_jan_xtrainnsamling.xlsx",
+  "15B_Farsund_torsk2015.xlsx")
 fns <- fns[!sel]
 
 fns
@@ -60,7 +62,8 @@ fn <- fns[1]
 df_try <- read_excel(paste0(datafolder, "/", fn))
 
 line_header <- search_lineno(df_try, 1, "Fisknr")
-dat <- read_excel(paste0(datafolder, "/", fn), skip = line_header - 1)
+# dat <- read_excel(paste0(datafolder, "/", fn), skip = line_header - 1)
+dat <- read_excel(paste0(datafolder, "/", fn), skip = line_header)
 
 # If file has a hole (empty row) in the data, we delete data from the first hole
 first_empty <- which(is.na(dat$Fisknr))[1]
@@ -136,11 +139,32 @@ get_colname <- function(df, colnumber) colnames(df)[colnumber]
 
 # Correct one column in one file:
 # View(dat_list[[3]])
-dat_list[[3]] <- dat_list[[3]] %>%
-  rename(Levervekt = Lever)
+# dat_list[[3]] <- dat_list[[3]] %>%
+#   rename(Levervekt = Lever)
+
+for (j in seq_along(dat_list)){
+  nm <- names(dat_list[[j]])
+  sel <- grepl("lever", nm, ignore.case = TRUE) & grepl("prøve", nm, ignore.case = TRUE) 
+  if (sum(sel) == 1)
+    names(dat_list[[j]])[sel] <- "Leverprøve"
+  sel <- grepl("lever", nm, ignore.case = TRUE) & grepl("vekt", nm, ignore.case = TRUE) 
+  if (sum(sel) == 1)
+    names(dat_list[[j]])[sel] <- "Levervekt"
+  sel <- grepl("lever", nm, ignore.case = TRUE) & grepl("farge", nm, ignore.case = TRUE) 
+  if (sum(sel) == 1)
+    names(dat_list[[j]])[sel] <- "Leverfarge"
+  sel <- grepl("gonade", nm, ignore.case = TRUE) & grepl("vekt", nm, ignore.case = TRUE) 
+  if (sum(sel) == 1)
+    names(dat_list[[j]])[sel] <- "Gonadevekt"
+  sel1 <- grepl("kysttorsk", nm, ignore.case = TRUE) & grepl("skrei", nm, ignore.case = TRUE) 
+  sel2 <- grepl("otolitt", nm, ignore.case = TRUE) & grepl("form", nm, ignore.case = TRUE) 
+  sel <- sel1 | sel2
+  if (sum(sel) == 1)
+    names(dat_list[[j]])[sel] <- "Otolittform"
+}
 
 # Get all column names, by column number 
-for (i in seq_along(dat_list)){
+for (i in seq_along(names(dat_list[[1]]))){
   cat(i, "\n")
   column_names <- dat_list %>% map_chr(get_colname, colnumber = i)
   print_less_common_values(column_names)
@@ -170,14 +194,22 @@ Levervekt not found for data set 3 (13B)
 Note: Upper- and lowercase is ignored - no need to worry about this   
 - e.g.: 'Vekt' will find both 'Vekt(g)' and 'vekt(g)'
 ```{r}
+#
 # Get selected columns  
 # 
+
+# Add columns that are lacking  
+# View(dat_list[[4]])
+dat_list[[4]]$Alder <- NA                      # HARD-CODED
+dat_list[[4]]$Otolittform <- as.character(NA)  # HARD-CODED
+
 dat_list_selected <- dat_list %>% 
   map(get_columns, colnames = c("Station", "Species", "Fisknr", "Lengde", "Vekt", "Kjønn", 
                                 "Levervekt", "Leverfarge", "Gonadevekt", "Alder", "Otolittform"))
 
 # Look for Levervekt:
-# dat_list[[3]]
+# dat_list[[4]]
+
 ```
 
 ## Make data frame list ready for combining, part 1  
@@ -193,6 +225,8 @@ for (j in seq_along(dat_list_selected)){
     str_extract("([^[[:blank:]]]+)") %>%
     toupper()
 }
+
+
 cat("New values of in data:\n")
 dat_list_selected %>% map(~unique(.$Station))  
 
@@ -205,9 +239,11 @@ dat_list_selected %>% map(~unique(.$Station))
  
 ```{r}
 cat("\n\nStations - Get file names:\n")
-#fns_to_read[c(13,18)]
-#dat_list_selected[[13]]$Station <- "43B"    # HARD-CODED!
-#dat_list_selected[[18]]$Station <- "96B"
+fns_to_read[c(8,13,14,18)]
+dat_list_selected[[8]]$Station <- "28B"    # HARD-CODED!
+dat_list_selected[[13]]$Station <- "43B"    # HARD-CODED!
+dat_list_selected[[14]]$Station <- "45B"    # HARD-CODED!
+dat_list_selected[[18]]$Station <- "80B"    # HARD-CODED!
 
 dat_list_selected %>% map(~unique(.$Station))  
 
@@ -227,13 +263,38 @@ for (j in seq_along(dat_list_selected)){
       Species = as.character(Species),
       Species = case_when(
         Species == "GADMO" ~ "Torsk",
-        Station %in% c("43B2","96B","43B") ~ "Torsk",
+        Species == "GADU.MOR" ~ "Torsk",
+        grepl("torsk", Species, ignore.case = TRUE) ~ "Torsk",
+        grepl("sandflyndre", Species, ignore.case = TRUE) ~ "Sandflyndre",
+        Station %in% c("43B2","96B","43B","28B","80B") ~ "Torsk",
         TRUE ~ Species)
     )
 }
 
 cat("After:\n")
 dat_list_selected %>% map_chr(~unique(.$Species))
+
+```
+### Check/fix sex  
+```{r}
+
+# View(dat_list_selected[[4]])
+
+dat_list_selected %>% map("Kjønn")
+
+for (j in seq_along(dat_list_selected)){
+  if (is.numeric(dat_list_selected[[j]]$Kjønn)){
+    dat_list_selected[[j]] <- dat_list_selected[[j]] %>%
+      mutate(
+        Kjønn = case_when(
+          Kjønn %in% 1 ~ "M",
+          Kjønn %in% 2 ~ "F")
+      )
+  }
+    dat_list_selected[[j]]$Kjønn <- toupper(dat_list_selected[[j]]$Kjønn)
+  }
+    
+dat_list_selected %>% map("Kjønn")
 
 ```
 
