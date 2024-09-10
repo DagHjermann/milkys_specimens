@@ -1,0 +1,107 @@
+---
+title: "100_Fish_data_combined"
+format: html
+---
+
+
+## Libraries
+```{r}
+library(dplyr)
+library(tidyr)
+library(purrr)     # map
+library(readr)
+library(ggplot2)
+# library(stringr)
+source("020_Get_fish_individual_data_functions.R")
+```
+
+
+
+## 1981-2014  
+
+### Data
+
+```{r}
+dat1 <- read_csv("data/milkys_specimens_until_2014.csv") %>%
+  filter(myear != 1949)
+str(dat1)
+
+```
+
+
+### Tissue  
+```{r}
+
+xtabs(~addNA(tissu) + addNA(speci), dat1)
+
+```
+
+### Cod  
+
+```{r}
+
+
+dat_plot <- dat1 %>%
+  filter(speci == "GADU MOR") %>%
+  group_by(myear, jmpst) %>%
+  summarise(
+    n = n(),
+    mean_length = mean(lnmea, na.rm = TRUE),
+    mean_weight = mean(wtmea, na.rm = TRUE),
+    mean_age = mean(agmea, na.rm = TRUE),
+    mean_liver = mean(Liver_tiswt, na.rm = TRUE),
+    mean_gon = mean(gonwt, na.rm = TRUE)
+  )
+
+dat_plot %>%
+  count(jmpst) %>%
+  ggplot(aes(jmpst, n)) +
+    geom_col() +
+  coord_flip()
+
+dat_plot <- dat_plot %>%
+  group_by(jmpst) %>%
+  mutate(
+    n_years = length(unique(myear)),
+    last_year = max(unique(myear))
+  ) %>%
+  filter(
+    n_years >= 3 & last_year >= 2010)
+
+ggplot(dat_plot, aes(myear, jmpst, fill = n)) +
+  geom_tile() +
+  scale_fill_viridis_b() +
+  labs(title = "Number of measurements")
+
+```
+### Mean length
+
+```{r}
+
+ggplot(dat_plot, aes(myear, jmpst, fill = mean_length)) +
+  geom_tile() +
+  scale_fill_viridis_c() +
+  labs(title = "Mean length")
+
+```
+### Mean weight
+
+```{r}
+
+ggplot(dat_plot, aes(myear, jmpst, fill = mean_weight)) +
+  geom_tile() +
+  scale_fill_viridis_c() +
+  labs(title = "Mean weight")
+
+```
+### Mean weight / length
+
+```{r}
+
+ggplot(dat_plot, aes(mean_length, mean_weight, color = myear)) +
+  geom_point() +
+  scale_color_viridis_b() +
+  facet_wrap(vars(jmpst)) +
+  labs(title = "Mean weight")
+
+```
